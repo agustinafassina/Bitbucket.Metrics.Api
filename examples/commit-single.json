@@ -1,0 +1,13 @@
+{
+  "hash": "abc123def456789",
+  "message": "Fix bug in authentication module\n\n- Fixed issue with token expiration\n- Improved error messages\n- Added logging for debugging",
+  "author": {
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "userId": "12345678-1234-1234-1234-123456789abc",
+    "displayName": "John Doe"
+  },
+  "date": "2024-01-15T10:30:00Z",
+  "repository": "my-repository",
+  "branch": "main"
+}

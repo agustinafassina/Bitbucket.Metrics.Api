@@ -1,0 +1,32 @@
+[
+  {
+    "name": "my-repository",
+    "slug": "my-repository",
+    "workspace": "my-workspace",
+    "fullName": "my-workspace/my-repository"
+  },
+  {
+    "name": "backend-api",
+    "slug": "backend-api",
+    "workspace": "my-workspace",
+    "fullName": "my-workspace/backend-api"
+  },
+  {
+    "name": "frontend-app",
+    "slug": "frontend-app",
+    "workspace": "my-workspace",
+    "fullName": "my-workspace/frontend-app"
+  },
+  {
+    "name": "shared-libraries",
+    "slug": "shared-libraries",
+    "workspace": "my-workspace",
+    "fullName": "my-workspace/shared-libraries"
+  },
+  {
+    "name": "documentation",
+    "slug": "documentation",
+    "workspace": "my-workspace",
+    "fullName": "my-workspace/documentation"
+  }
+]

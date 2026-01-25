@@ -1,0 +1,6 @@
+@BitbucketApi_HostAddress = http://localhost:5142
+
+GET {{BitbucketApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

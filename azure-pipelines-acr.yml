@@ -1,0 +1,25 @@
+name: $(SourceBranchName)_$(Build.SourceVersion)
+
+trigger:
+ branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: 'ubuntu-24.04'
+
+steps:
+
+- task: DockerInstaller@0
+  displayName: Azure login and repository
+- script: az acr login -u $(AZURECR_USER) -p $(AZURECR_PASSWORD) --name $(DOCKER_REPOSITORY_NAME)
+
+- task: DockerInstaller@0
+  displayName: Docker build
+- script: docker build -t $(DOCKER_REPOSITORY_NAME)/$(DOCKER_IMAGE):$(Build.SourceVersion) .
+
+- task: DockerInstaller@0
+  displayName: Push app container image to Azure Container Registry
+- script: docker push $(DOCKER_REPOSITORY_NAME)/$(DOCKER_IMAGE):$(Build.SourceVersion)
