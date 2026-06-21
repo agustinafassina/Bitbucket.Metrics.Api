@@ -13,7 +13,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Dependency Injection: Repositories (then Services)
-builder.Services.AddRepositories();
+builder.Services.AddRepositories(configuration);
 builder.Services.AddApplicationServices();
 
 // Request validators (FluentValidation)

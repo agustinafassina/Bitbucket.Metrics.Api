@@ -12,6 +12,7 @@ namespace Template.Services
             services.AddSingleton<ItemMapper>();
             services.AddTransient<IItemService, ItemService>();
             services.AddTransient<IItemCatalogService, ItemCatalogService>();
+            services.AddTransient<IBitbucketMetricsService, BitbucketMetricsService>();
             return services;
         }
     }
