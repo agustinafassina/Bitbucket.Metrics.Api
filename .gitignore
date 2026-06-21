@@ -1,4 +1,13 @@
 /obj
 /bin
+/Template.UnitTests/bin
+/Template.UnitTests/obj
+/Template.Api/bin
+/Template.Api/obj
+Template.Repository/bin
+Template.Repository/obj
+Template.Services/bin
+Template.Services/obj
+Template.Models/bin
+Template.Models/obj
 .vscode
-appsettings.Development.json
