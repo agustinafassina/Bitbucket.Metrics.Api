@@ -29,5 +29,43 @@ namespace Template.Services.Interfaces
             DateTimeOffset? since = null,
             string interval = "day",
             CancellationToken cancellationToken = default);
+
+        // Pull request throughput and time-to-merge.
+        Task<PullRequestMetricsDto> GetPullRequestMetricsAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default);
+
+        // Reviewer leaderboard (who reviews/approves the most).
+        Task<IReadOnlyList<ReviewerMetricDto>> GetReviewerLeaderboardAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            int top = 10,
+            CancellationToken cancellationToken = default);
+
+        // Code churn (lines added/removed) per author. Bounded by MaxDiffCommits.
+        Task<IReadOnlyList<ChurnMetricDto>> GetChurnAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            int top = 10,
+            CancellationToken cancellationToken = default);
+
+        // Commit activity by day-of-week and hour.
+        Task<IReadOnlyList<CommitHeatmapPointDto>> GetActivityHeatmapAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default);
+
+        // Work grouped by Jira issue key found in commit messages (Jira cross-reference, Bitbucket side).
+        Task<IReadOnlyList<IssueActivityDto>> GetIssueActivityAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default);
+
+        // Aggregated overview for the front-end dashboard.
+        Task<WorkspaceSummaryDto> GetWorkspaceSummaryAsync(
+            DateTimeOffset? since = null,
+            int top = 5,
+            CancellationToken cancellationToken = default);
     }
 }

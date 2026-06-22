@@ -101,6 +101,131 @@ namespace Template.Repository.Implementations
                 .ToList();
         }
 
+        public async Task<IReadOnlyList<BitbucketPullRequestDto>> GetPullRequestsAsync(
+            string repoSlug,
+            IEnumerable<string> states,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default)
+        {
+            List<PullRequestApi> prs = await GetPullRequestApisAsync(repoSlug, states, since, cancellationToken);
+
+            return prs
+                .Where(p => p is not null && (!since.HasValue || p.CreatedOn >= since.Value))
+                .Select(p => new BitbucketPullRequestDto
+                {
+                    Id = p.Id,
+                    Title = p.Title ?? string.Empty,
+                    State = p.State ?? string.Empty,
+                    Author = ResolveActor(p.Author),
+                    CreatedOn = p.CreatedOn,
+                    UpdatedOn = p.UpdatedOn,
+                    CommentCount = p.CommentCount,
+                    HoursToMerge = string.Equals(p.State, "MERGED", StringComparison.OrdinalIgnoreCase)
+                        ? Math.Round((p.UpdatedOn - p.CreatedOn).TotalHours, 2)
+                        : null,
+                    RepositorySlug = repoSlug
+                })
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<ReviewerMetricDto>> GetReviewerStatsAsync(
+            string repoSlug,
+            IEnumerable<string> states,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default)
+        {
+            List<PullRequestApi> prs = await GetPullRequestApisAsync(repoSlug, states, since, cancellationToken);
+
+            Dictionary<string, ReviewerMetricDto> reviewers = new(StringComparer.OrdinalIgnoreCase);
+
+            foreach (PullRequestApi pr in prs)
+            {
+                if (since.HasValue && pr.CreatedOn < since.Value)
+                    continue;
+                if (pr.Participants is null)
+                    continue;
+
+                foreach (ParticipantApi participant in pr.Participants)
+                {
+                    bool isReviewer = string.Equals(participant.Role, "REVIEWER", StringComparison.OrdinalIgnoreCase);
+                    if (!isReviewer && !participant.Approved)
+                        continue;
+
+                    string name = ResolveActor(participant.User);
+                    if (!reviewers.TryGetValue(name, out ReviewerMetricDto? metric))
+                    {
+                        metric = new ReviewerMetricDto { Reviewer = name };
+                        reviewers[name] = metric;
+                    }
+
+                    if (isReviewer)
+                        metric.PullRequestsReviewed++;
+                    if (participant.Approved)
+                        metric.Approvals++;
+                }
+            }
+
+            return reviewers.Values
+                .OrderByDescending(r => r.Approvals)
+                .ThenByDescending(r => r.PullRequestsReviewed)
+                .ToList();
+        }
+
+        public async Task<(int LinesAdded, int LinesRemoved)> GetCommitDiffStatAsync(
+            string repoSlug,
+            string commitHash,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureWorkspaceConfigured();
+            if (string.IsNullOrWhiteSpace(repoSlug))
+                throw new ArgumentException("Repository slug is required.", nameof(repoSlug));
+            if (string.IsNullOrWhiteSpace(commitHash))
+                throw new ArgumentException("Commit hash is required.", nameof(commitHash));
+
+            string url = $"repositories/{_options.Workspace}/{repoSlug}/diffstat/{commitHash}?pagelen={_options.PageLength}";
+            List<DiffStatApi> files = await GetAllPagesAsync<DiffStatApi>(url, cancellationToken: cancellationToken);
+
+            return (files.Sum(f => f.LinesAdded), files.Sum(f => f.LinesRemoved));
+        }
+
+        private async Task<List<PullRequestApi>> GetPullRequestApisAsync(
+            string repoSlug,
+            IEnumerable<string> states,
+            DateTimeOffset? since,
+            CancellationToken cancellationToken)
+        {
+            EnsureWorkspaceConfigured();
+            if (string.IsNullOrWhiteSpace(repoSlug))
+                throw new ArgumentException("Repository slug is required.", nameof(repoSlug));
+
+            string url = $"repositories/{_options.Workspace}/{repoSlug}/pullrequests?pagelen={_options.PageLength}&sort=-created_on";
+
+            foreach (string state in states ?? Enumerable.Empty<string>())
+            {
+                if (!string.IsNullOrWhiteSpace(state))
+                    url += $"&state={Uri.EscapeDataString(state)}";
+            }
+
+            if (since.HasValue)
+            {
+                string iso = since.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                url += $"&q={Uri.EscapeDataString($"created_on>={iso}")}";
+            }
+
+            return await GetAllPagesAsync<PullRequestApi>(
+                url,
+                stopWhen: since.HasValue ? p => p.CreatedOn < since.Value : null,
+                cancellationToken: cancellationToken);
+        }
+
+        private static string ResolveActor(ActorApi? actor)
+        {
+            if (actor is null)
+                return "Unknown";
+            string? name = actor.DisplayName ?? actor.Nickname;
+            return string.IsNullOrWhiteSpace(name) ? "Unknown" : name;
+        }
+
         private static (string Name, string? Email) ResolveAuthor(CommitAuthorApi? author)
         {
             if (author is null)

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Template.Models.Dto.Bitbucket;
 using Template.Services.Interfaces;
 
 namespace Template.Api.Controllers
@@ -61,6 +62,74 @@ namespace Template.Api.Controllers
         {
             _logger.LogInformation("GetCommitFrequency endpoint called (repo: {RepoSlug}, interval: {Interval})", repoSlug, interval);
             IReadOnlyList<Models.Dto.Bitbucket.CommitActivityPointDto>? result = await _metricsService.GetCommitFrequencyAsync(repoSlug, ResolveSince(sinceDays), interval, cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("metrics/pull-requests")]
+        public async Task<IActionResult> GetPullRequestMetrics(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetPullRequestMetrics endpoint called (repo: {RepoSlug})", repoSlug);
+            PullRequestMetricsDto? result = await _metricsService.GetPullRequestMetricsAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("metrics/reviewers")]
+        public async Task<IActionResult> GetReviewerLeaderboard(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            [FromQuery] int top,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetReviewerLeaderboard endpoint called (repo: {RepoSlug})", repoSlug);
+            IReadOnlyList<ReviewerMetricDto>? result = await _metricsService.GetReviewerLeaderboardAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("metrics/churn")]
+        public async Task<IActionResult> GetChurn(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            [FromQuery] int top,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetChurn endpoint called (repo: {RepoSlug})", repoSlug);
+            IReadOnlyList<ChurnMetricDto>? result = await _metricsService.GetChurnAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("metrics/heatmap")]
+        public async Task<IActionResult> GetActivityHeatmap(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetActivityHeatmap endpoint called (repo: {RepoSlug})", repoSlug);
+            IReadOnlyList<CommitHeatmapPointDto>? result = await _metricsService.GetActivityHeatmapAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("metrics/issues")]
+        public async Task<IActionResult> GetIssueActivity(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetIssueActivity endpoint called (repo: {RepoSlug})", repoSlug);
+            IReadOnlyList<IssueActivityDto>? result = await _metricsService.GetIssueActivityAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("dashboard/summary")]
+        public async Task<IActionResult> GetWorkspaceSummary(
+            [FromQuery] int? sinceDays,
+            [FromQuery] int top,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetWorkspaceSummary endpoint called");
+            WorkspaceSummaryDto? result = await _metricsService.GetWorkspaceSummaryAsync(ResolveSince(sinceDays), top == 0 ? 5 : top, cancellationToken);
             return Ok(result);
         }
 
