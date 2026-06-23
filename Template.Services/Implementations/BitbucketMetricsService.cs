@@ -27,6 +27,9 @@ namespace Template.Services.Implementations
             _maxDiffCommits = options.Value.MaxDiffCommits > 0 ? options.Value.MaxDiffCommits : 300;
         }
 
+        public Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
+            => _client.GetUsersAsync(cancellationToken);
+
         public Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
             => _client.GetRepositoriesAsync(cancellationToken);
 

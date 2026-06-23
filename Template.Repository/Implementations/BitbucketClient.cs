@@ -56,6 +56,26 @@ namespace Template.Repository.Implementations
             }
         }
 
+        public async Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
+        {
+            EnsureWorkspaceConfigured();
+
+            string url = $"workspaces/{_options.Workspace}/members?pagelen={_options.PageLength}";
+            List<WorkspaceMemberApi> members = await GetAllPagesAsync<WorkspaceMemberApi>(url, cancellationToken: cancellationToken);
+
+            return members
+                .Where(m => m?.User is not null)
+                .Select(m => new BitbucketUserDto
+                {
+                    AccountId = m.User!.AccountId,
+                    Uuid = m.User.Uuid,
+                    DisplayName = m.User.DisplayName ?? m.User.Nickname ?? "Unknown",
+                    Nickname = m.User.Nickname
+                })
+                .OrderBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         public async Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
         {
             EnsureWorkspaceConfigured();

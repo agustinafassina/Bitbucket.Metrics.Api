@@ -20,6 +20,9 @@ namespace Template.Repository.Implementations
             _ttl = TimeSpan.FromMinutes(options.Value.CacheMinutes > 0 ? options.Value.CacheMinutes : 10);
         }
 
+        public Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
+            => GetOrCreateAsync("bb:users", _ttl, () => _inner.GetUsersAsync(cancellationToken));
+
         public Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
             => GetOrCreateAsync("bb:repos", _ttl, () => _inner.GetRepositoriesAsync(cancellationToken));
 

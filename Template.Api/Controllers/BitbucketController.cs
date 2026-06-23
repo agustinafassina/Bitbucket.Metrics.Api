@@ -33,6 +33,14 @@ namespace Template.Api.Controllers
             return Ok(commits);
         }
 
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetUsers endpoint called");
+            IReadOnlyList<BitbucketUserDto>? result = await _metricsService.GetUsersAsync(cancellationToken);
+            return Ok(result);
+        }
+
         [HttpGet("contributors")]
         public async Task<IActionResult> GetContributors(
             [FromQuery] string? repoSlug,

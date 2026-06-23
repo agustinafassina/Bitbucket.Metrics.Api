@@ -4,6 +4,9 @@ namespace Template.Services.Interfaces
 {
     public interface IBitbucketMetricsService
     {
+        // Workspace members (real Bitbucket users) for the user selector.
+        Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default);
+
         Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default);
 
         Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(

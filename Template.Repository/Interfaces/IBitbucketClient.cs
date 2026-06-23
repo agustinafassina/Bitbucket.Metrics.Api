@@ -4,6 +4,8 @@ namespace Template.Repository.Interfaces
 {
     public interface IBitbucketClient
     {
+        Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default);
+
         Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default);
 
         Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(
