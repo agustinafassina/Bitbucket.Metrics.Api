@@ -11,6 +11,12 @@ namespace Template.Services.Interfaces
             DateTimeOffset? since = null,
             CancellationToken cancellationToken = default);
 
+        // Distinct commit authors (for user filters). When repoSlug is null, spans the whole workspace.
+        Task<IReadOnlyList<ContributorDto>> GetContributorsAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default);
+
         // Who commits the most. When repoSlug is null, aggregates across the whole workspace.
         Task<IReadOnlyList<CommitterMetricDto>> GetTopCommittersAsync(
             string? repoSlug = null,

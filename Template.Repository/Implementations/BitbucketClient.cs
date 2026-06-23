@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -40,7 +41,15 @@ namespace Template.Repository.Implementations
             if (_httpClient.DefaultRequestHeaders.Authorization is not null)
                 return;
 
-            if (!string.IsNullOrWhiteSpace(_options.AccessToken))
+            if (string.IsNullOrWhiteSpace(_options.AccessToken))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(_options.Email))
+            {
+                string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.Email}:{_options.AccessToken}"));
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", encoded);
+            }
+            else
             {
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", _options.AccessToken);
@@ -218,6 +227,9 @@ namespace Template.Repository.Implementations
                 cancellationToken: cancellationToken);
         }
 
+        private static string Truncate(string value, int max)
+            => value.Length <= max ? value : value[..max] + "...";
+
         private static string ResolveActor(ActorApi? actor)
         {
             if (actor is null)
@@ -266,12 +278,13 @@ namespace Template.Repository.Implementations
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                using var response = await _httpClient.GetAsync(url, cancellationToken);
+                using HttpResponseMessage? response = await _httpClient.GetAsync(url, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
                     string? body = await response.Content.ReadAsStringAsync(cancellationToken);
                     _logger.LogError("Bitbucket API call to {Url} failed with {StatusCode}: {Body}", url, (int)response.StatusCode, body);
-                    throw new HttpRequestException($"Bitbucket API returned {(int)response.StatusCode} for '{url}'.");
+                    string detail = string.IsNullOrWhiteSpace(body) ? string.Empty : $" Response: {Truncate(body, 500)}";
+                    throw new HttpRequestException($"Bitbucket API returned {(int)response.StatusCode} for '{url}'.{detail}");
                 }
 
                 PagedResponse<T>? paged = await response.Content.ReadFromJsonAsync<PagedResponse<T>>(JsonOptions, cancellationToken) ?? new PagedResponse<T>();

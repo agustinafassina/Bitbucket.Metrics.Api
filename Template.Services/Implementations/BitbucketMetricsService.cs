@@ -36,6 +36,26 @@ namespace Template.Services.Implementations
             CancellationToken cancellationToken = default)
             => _client.GetCommitsAsync(repoSlug, since, cancellationToken);
 
+        public async Task<IReadOnlyList<ContributorDto>> GetContributorsAsync(
+            string? repoSlug = null,
+            DateTimeOffset? since = null,
+            CancellationToken cancellationToken = default)
+        {
+            List<BitbucketCommitDto> commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+
+            return commits
+                .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new ContributorDto
+                {
+                    Name = g.Key,
+                    Email = g.Select(c => c.AuthorEmail).FirstOrDefault(e => !string.IsNullOrWhiteSpace(e)),
+                    CommitCount = g.Count(),
+                    Repositories = g.Select(c => c.RepositorySlug).Distinct().OrderBy(s => s).ToList()
+                })
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         public async Task<IReadOnlyList<CommitterMetricDto>> GetTopCommittersAsync(
             string? repoSlug = null,
             DateTimeOffset? since = null,
@@ -79,7 +99,7 @@ namespace Template.Services.Implementations
             DateTimeOffset? since = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
+            IReadOnlyList<BitbucketRepositoryDto> repos = await _client.GetRepositoriesAsync(cancellationToken);
             List<RepositoryActivityDto>? activity = new(repos.Count);
 
             foreach (BitbucketRepositoryDto? repo in repos)
@@ -149,7 +169,7 @@ namespace Template.Services.Implementations
                 .GroupBy(p => p.Author, StringComparer.OrdinalIgnoreCase)
                 .Select(g =>
                 {
-                    var merged = g.Where(p => p.HoursToMerge.HasValue).Select(p => p.HoursToMerge!.Value).ToList();
+                    List<double>? merged = g.Where(p => p.HoursToMerge.HasValue).Select(p => p.HoursToMerge!.Value).ToList();
                     return new AuthorPullRequestStatDto
                     {
                         Author = g.Key,
@@ -358,10 +378,12 @@ namespace Template.Services.Implementations
                 .Take(top <= 0 ? 5 : top)
                 .ToList();
 
-            KeyValuePair<object, object>? busiest = allCommits
-                .GroupBy(c => new { Day = (int)c.Date.UtcDateTime.DayOfWeek, c.Date.UtcDateTime.Hour })
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault();
+            List<(int Day, int Hour, int Count)> busiestRanked = allCommits
+                .GroupBy(c => (Day: (int)c.Date.UtcDateTime.DayOfWeek, Hour: c.Date.UtcDateTime.Hour))
+                .Select(g => (g.Key.Day, g.Key.Hour, Count: g.Count()))
+                .OrderByDescending(x => x.Count)
+                .ToList();
+            (int Day, int Hour, int Count)? busiest = busiestRanked.Count > 0 ? busiestRanked[0] : null;
 
             int linkedIssues = allCommits
                 .SelectMany(c => IssueKeyRegex.Matches(c.Message).Select(m => m.Value.ToUpperInvariant()))
@@ -375,8 +397,8 @@ namespace Template.Services.Implementations
                 CommitCount = allCommits.Count,
                 ContributorCount = allCommits.Select(c => c.AuthorName).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
                 LinkedIssueCount = linkedIssues,
-                BusiestDay = busiest is not null ? ((DayOfWeek)busiest.Key.Day).ToString() : null,
-                BusiestHour = busiest?.Key.Hour,
+                BusiestDay = busiest.HasValue ? ((DayOfWeek)busiest.Value.Day).ToString() : null,
+                BusiestHour = busiest?.Hour,
                 TopCommitters = topCommitters,
                 RepositoryActivity = repoActivity.OrderByDescending(a => a.CommitCount).ThenBy(a => a.RepositorySlug).ToList()
             };
@@ -449,7 +471,7 @@ namespace Template.Services.Implementations
 
         private static string BuildPeriodKey(DateTimeOffset date, string interval)
         {
-            DateTimeOffset utc = date.UtcDateTime;
+            DateTime utc = date.UtcDateTime;
             return interval switch
             {
                 "month" => utc.ToString("yyyy-MM", CultureInfo.InvariantCulture),

@@ -33,6 +33,17 @@ namespace Template.Api.Controllers
             return Ok(commits);
         }
 
+        [HttpGet("contributors")]
+        public async Task<IActionResult> GetContributors(
+            [FromQuery] string? repoSlug,
+            [FromQuery] int? sinceDays,
+            CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("GetContributors endpoint called (repo: {RepoSlug})", repoSlug);
+            IReadOnlyList<ContributorDto>? result = await _metricsService.GetContributorsAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            return Ok(result);
+        }
+
         [HttpGet("metrics/top-committers")]
         public async Task<IActionResult> GetTopCommitters(
             [FromQuery] string? repoSlug,
