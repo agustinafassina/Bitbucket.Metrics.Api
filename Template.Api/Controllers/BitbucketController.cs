@@ -26,10 +26,10 @@ namespace Template.Api.Controllers
         }
 
         [HttpGet("repositories/{repoSlug}/commits")]
-        public async Task<IActionResult> GetCommits(string repoSlug, [FromQuery] int? sinceDays, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetCommits(string repoSlug, [FromQuery] int? sinceDays, [FromQuery] string? authorId, CancellationToken cancellationToken)
         {
             _logger.LogInformation("GetCommits endpoint called for {RepoSlug}", repoSlug);
-            IReadOnlyList<BitbucketCommitDto>? commits = await _metricsService.GetCommitsAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            IReadOnlyList<BitbucketCommitDto>? commits = await _metricsService.GetCommitsAsync(repoSlug, ResolveSince(sinceDays), authorId, cancellationToken);
             return Ok(commits);
         }
 
@@ -57,10 +57,11 @@ namespace Template.Api.Controllers
             [FromQuery] string? repoSlug,
             [FromQuery] int? sinceDays,
             [FromQuery] int top,
+            [FromQuery] string? authorId,
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("GetTopCommitters endpoint called (repo: {RepoSlug}, top: {Top})", repoSlug, top);
-            IReadOnlyList<CommitterMetricDto>? result = await _metricsService.GetTopCommittersAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, cancellationToken);
+            IReadOnlyList<CommitterMetricDto>? result = await _metricsService.GetTopCommittersAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, authorId, cancellationToken);
             return Ok(result);
         }
 
@@ -77,10 +78,11 @@ namespace Template.Api.Controllers
             [FromQuery] string? repoSlug,
             [FromQuery] int? sinceDays,
             [FromQuery] string interval = "day",
+            [FromQuery] string? authorId = null,
             CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("GetCommitFrequency endpoint called (repo: {RepoSlug}, interval: {Interval})", repoSlug, interval);
-            IReadOnlyList<Models.Dto.Bitbucket.CommitActivityPointDto>? result = await _metricsService.GetCommitFrequencyAsync(repoSlug, ResolveSince(sinceDays), interval, cancellationToken);
+            IReadOnlyList<Models.Dto.Bitbucket.CommitActivityPointDto>? result = await _metricsService.GetCommitFrequencyAsync(repoSlug, ResolveSince(sinceDays), interval, authorId, cancellationToken);
             return Ok(result);
         }
 
@@ -112,10 +114,11 @@ namespace Template.Api.Controllers
             [FromQuery] string? repoSlug,
             [FromQuery] int? sinceDays,
             [FromQuery] int top,
+            [FromQuery] string? authorId,
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("GetChurn endpoint called (repo: {RepoSlug})", repoSlug);
-            IReadOnlyList<ChurnMetricDto>? result = await _metricsService.GetChurnAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, cancellationToken);
+            IReadOnlyList<ChurnMetricDto>? result = await _metricsService.GetChurnAsync(repoSlug, ResolveSince(sinceDays), top == 0 ? 10 : top, authorId, cancellationToken);
             return Ok(result);
         }
 
@@ -123,10 +126,11 @@ namespace Template.Api.Controllers
         public async Task<IActionResult> GetActivityHeatmap(
             [FromQuery] string? repoSlug,
             [FromQuery] int? sinceDays,
+            [FromQuery] string? authorId,
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("GetActivityHeatmap endpoint called (repo: {RepoSlug})", repoSlug);
-            IReadOnlyList<CommitHeatmapPointDto>? result = await _metricsService.GetActivityHeatmapAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            IReadOnlyList<CommitHeatmapPointDto>? result = await _metricsService.GetActivityHeatmapAsync(repoSlug, ResolveSince(sinceDays), authorId, cancellationToken);
             return Ok(result);
         }
 
@@ -134,10 +138,11 @@ namespace Template.Api.Controllers
         public async Task<IActionResult> GetIssueActivity(
             [FromQuery] string? repoSlug,
             [FromQuery] int? sinceDays,
+            [FromQuery] string? authorId,
             CancellationToken cancellationToken)
         {
             _logger.LogInformation("GetIssueActivity endpoint called (repo: {RepoSlug})", repoSlug);
-            IReadOnlyList<IssueActivityDto>? result = await _metricsService.GetIssueActivityAsync(repoSlug, ResolveSince(sinceDays), cancellationToken);
+            IReadOnlyList<IssueActivityDto>? result = await _metricsService.GetIssueActivityAsync(repoSlug, ResolveSince(sinceDays), authorId, cancellationToken);
             return Ok(result);
         }
 

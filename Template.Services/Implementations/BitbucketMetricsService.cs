@@ -33,11 +33,17 @@ namespace Template.Services.Implementations
         public Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
             => _client.GetRepositoriesAsync(cancellationToken);
 
-        public Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(
+        public async Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(
             string repoSlug,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default)
-            => _client.GetCommitsAsync(repoSlug, since, cancellationToken);
+        {
+            IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repoSlug, since, cancellationToken);
+            return string.IsNullOrWhiteSpace(authorId)
+                ? commits
+                : commits.Where(c => MatchesAuthor(c, authorId)).ToList();
+        }
 
         public async Task<IReadOnlyList<ContributorDto>> GetContributorsAsync(
             string? repoSlug = null,
@@ -63,9 +69,10 @@ namespace Template.Services.Implementations
             string? repoSlug = null,
             DateTimeOffset? since = null,
             int top = 10,
+            string? authorId = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken, authorId);
 
             List<CommitterMetricDto>? metrics = commits
                 .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
@@ -137,9 +144,10 @@ namespace Template.Services.Implementations
             string? repoSlug = null,
             DateTimeOffset? since = null,
             string interval = "day",
+            string? authorId = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken, authorId);
             string? bucket = NormalizeInterval(interval);
 
             return commits
@@ -237,9 +245,10 @@ namespace Template.Services.Implementations
             string? repoSlug = null,
             DateTimeOffset? since = null,
             int top = 10,
+            string? authorId = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken, authorId);
 
             List<BitbucketCommitDto>? scoped = commits.OrderByDescending(c => c.Date).Take(_maxDiffCommits).ToList();
             if (scoped.Count < commits.Count)
@@ -273,9 +282,10 @@ namespace Template.Services.Implementations
         public async Task<IReadOnlyList<CommitHeatmapPointDto>> GetActivityHeatmapAsync(
             string? repoSlug = null,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken, authorId);
 
             return commits
                 .GroupBy(c => new { Day = (int)c.Date.UtcDateTime.DayOfWeek, c.Date.UtcDateTime.Hour })
@@ -294,9 +304,10 @@ namespace Template.Services.Implementations
         public async Task<IReadOnlyList<IssueActivityDto>> GetIssueActivityAsync(
             string? repoSlug = null,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default)
         {
-            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken);
+            List<BitbucketCommitDto>? commits = await GetCommitsForScopeAsync(repoSlug, since, cancellationToken, authorId);
 
             Dictionary<string, List<BitbucketCommitDto>>? byIssue = new(StringComparer.OrdinalIgnoreCase);
 
@@ -410,25 +421,37 @@ namespace Template.Services.Implementations
         private async Task<List<BitbucketCommitDto>> GetCommitsForScopeAsync(
             string? repoSlug,
             DateTimeOffset? since,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? authorId = null)
         {
+            List<BitbucketCommitDto> all;
+
             if (!string.IsNullOrWhiteSpace(repoSlug))
             {
                 IReadOnlyList<BitbucketCommitDto>? single = await _client.GetCommitsAsync(repoSlug, since, cancellationToken);
-                return single.ToList();
+                all = single.ToList();
             }
-
-            IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
-            List<BitbucketCommitDto>? all = new();
-            foreach (BitbucketRepositoryDto? repo in repos)
+            else
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repo.Slug, since, cancellationToken);
-                all.AddRange(commits);
+                IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
+                all = new();
+                foreach (BitbucketRepositoryDto? repo in repos)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repo.Slug, since, cancellationToken);
+                    all.AddRange(commits);
+                }
             }
 
-            return all;
+            return string.IsNullOrWhiteSpace(authorId)
+                ? all
+                : all.Where(c => MatchesAuthor(c, authorId)).ToList();
         }
+
+        // Matches a commit author by stable id (accountId or uuid).
+        private static bool MatchesAuthor(BitbucketCommitDto commit, string authorId)
+            => string.Equals(commit.AuthorAccountId, authorId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(commit.AuthorUuid, authorId, StringComparison.OrdinalIgnoreCase);
 
         private async Task<List<BitbucketPullRequestDto>> GetPullRequestsForScopeAsync(
             string? repoSlug,

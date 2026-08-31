@@ -124,6 +124,8 @@ namespace Template.Repository.Implementations
                         Date = c.Date,
                         AuthorName = name,
                         AuthorEmail = email,
+                        AuthorAccountId = c.Author?.User?.AccountId,
+                        AuthorUuid = c.Author?.User?.Uuid,
                         RepositorySlug = repoSlug
                     };
                 })

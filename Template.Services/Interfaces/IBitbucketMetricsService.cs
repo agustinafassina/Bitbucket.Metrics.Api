@@ -12,6 +12,7 @@ namespace Template.Services.Interfaces
         Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(
             string repoSlug,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Distinct commit authors (for user filters). When repoSlug is null, spans the whole workspace.
@@ -25,6 +26,7 @@ namespace Template.Services.Interfaces
             string? repoSlug = null,
             DateTimeOffset? since = null,
             int top = 10,
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Where the activity happens: commits per repository.
@@ -37,6 +39,7 @@ namespace Template.Services.Interfaces
             string? repoSlug = null,
             DateTimeOffset? since = null,
             string interval = "day",
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Pull request throughput and time-to-merge.
@@ -57,18 +60,21 @@ namespace Template.Services.Interfaces
             string? repoSlug = null,
             DateTimeOffset? since = null,
             int top = 10,
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Commit activity by day-of-week and hour.
         Task<IReadOnlyList<CommitHeatmapPointDto>> GetActivityHeatmapAsync(
             string? repoSlug = null,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Work grouped by Jira issue key found in commit messages (Jira cross-reference, Bitbucket side).
         Task<IReadOnlyList<IssueActivityDto>> GetIssueActivityAsync(
             string? repoSlug = null,
             DateTimeOffset? since = null,
+            string? authorId = null,
             CancellationToken cancellationToken = default);
 
         // Aggregated overview for the front-end dashboard.
