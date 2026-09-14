@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Bitbucket.Metrics.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bitbucket.Metrics.Models\Bitbucket.Metrics.Models.csproj" />
+    <ProjectReference Include="..\Bitbucket.Metrics.Repository\Bitbucket.Metrics.Repository.csproj" />
+    <ProjectReference Include="..\Bitbucket.Metrics.Services\Bitbucket.Metrics.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+  </ItemGroup>
+
+</Project>

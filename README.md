@@ -1,4 +1,4 @@
-## TemplateApi (.NET 10) ✨
+## Bitbucket.Metrics (.NET 10) ✨
 Starter Web API template using .NET 10 with example controllers, services, mapping and middleware. It provides a foundation for building Web APIs with JWT authentication, global exception handling, and Swagger.<br>
 Status: template ready for customization. <br>
 Forked from https://github.com/agustinafassina/TemplateApi.Net8
@@ -8,14 +8,14 @@ Forked from https://github.com/agustinafassina/TemplateApi.Net8
 - 🐳 (Optional) Docker
 
 ## Solution structure 📦 (MVC + OOP)
-- **Template.Api**: entry point, controllers, configs (Swagger, Mapperly), middleware, validators, request contracts.
-- **Template.Services**: application services and interfaces; registered via `AddApplicationServices()`.
-- **Template.Repository**: data access (repositories); registered via `AddRepositories()`.
-- **Template.Models**: DTOs and shared models.
-- **Template.Unittests**: xUnit unit tests for `Template.Services` (project file: `TemplateApi.Tests.csproj`).
+- **Bitbucket.Metrics.Api**: entry point, controllers, configs (Swagger, Mapperly), middleware, validators, request contracts.
+- **Bitbucket.Metrics.Services**: application services and interfaces; registered via `AddApplicationServices()`.
+- **Bitbucket.Metrics.Repository**: data access (repositories); registered via `AddRepositories()`.
+- **Bitbucket.Metrics.Models**: DTOs and shared models.
+- **Bitbucket.Metrics.Unittests**: xUnit unit tests for `Bitbucket.Metrics.Services` (project file: `Bitbucket.Metrics.Tests.csproj`).
 
 ## Unit tests 🧪
-From the repository root (same folder as `TemplateApi.sln`):
+From the repository root (same folder as `Bitbucket.Metrics.sln`):
 
 ```
 dotnet test
@@ -24,7 +24,7 @@ dotnet test
 Run only the test project:
 
 ```
-dotnet test Template.Unittests/TemplateApi.Tests.csproj
+dotnet test Bitbucket.Metrics.Unittests/Bitbucket.Metrics.Tests.csproj
 ```
 
 Optional: verbose output or filter by display name:
@@ -49,7 +49,7 @@ dotnet build
 
 2. Run the API:
 ```
-dotnet run --project Template.Api
+dotnet run --project Bitbucket.Metrics.Api
 ```
 
 By default, when running in Development, Swagger should be available at `http://localhost:{port}/swagger`.
@@ -94,32 +94,9 @@ And in controllers you can use:
 [Authorize(AuthenticationSchemes = "Auth0App2")]
 ```
 
-## Request validation ✅
-The API uses **FluentValidation** for request DTOs (e.g. `ItemCreateDto`). Validators live in `Template.Api/Validators/` and are registered in DI; controllers inject `IValidator<T>` and validate before calling services.
-
 ## Configuration ⚙️
 - Use `appsettings.json` and `appsettings.Development.json` for environment-specific values.
 - Environment variables prefixed with `ASPNETCORE_` affect host behavior.
-
-## Example: Version endpoint ⚡
-This template exposes a simple version endpoint in `ItemController`.
-
-- Request:
-
-```
-GET /api/v1/item/version
-```
-
-- curl example:
-
-```bash
-curl -i http://localhost:5000/api/v1/item/version
-```
-
-- Response 200 (example):
-```json
-"v.1.0.0"
-```
 
 ## Contributing 🤝
 1. Fork the repo
