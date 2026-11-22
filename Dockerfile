@@ -7,10 +7,10 @@ COPY Bitbucket.Metrics.Repository/*.csproj Bitbucket.Metrics.Repository/
 COPY Bitbucket.Metrics.Services/*.csproj Bitbucket.Metrics.Services/
 COPY Bitbucket.Metrics.Api/*.csproj Bitbucket.Metrics.Api/
 
-RUN dotnet restore Bitbucket.Metrics.sln
+RUN dotnet restore Bitbucket.Metrics.Api/Bitbucket.Metrics.Api.csproj
 
 COPY . .
-RUN dotnet publish Bitbucket.Metrics.Api/Bitbucket.Metrics.Api.csproj -c Release -o /release
+RUN dotnet publish Bitbucket.Metrics.Api/Bitbucket.Metrics.Api.csproj -c Release -o /release --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 WORKDIR /app

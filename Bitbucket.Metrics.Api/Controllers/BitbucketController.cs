@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Bitbucket.Metrics.Models.Dto.Bitbucket;
 using Bitbucket.Metrics.Services.Interfaces;
@@ -5,6 +6,7 @@ using Bitbucket.Metrics.Services.Interfaces;
 namespace Bitbucket.Metrics.Api.Controllers
 {
     [ApiController]
+    [Authorize]
     [Route("api/v1/[controller]")]
     public class BitbucketController : ControllerBase
     {

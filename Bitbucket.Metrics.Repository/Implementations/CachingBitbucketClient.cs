@@ -10,21 +10,30 @@ namespace Bitbucket.Metrics.Repository.Implementations
     {
         private readonly IBitbucketClient _inner;
         private readonly IMemoryCache _cache;
+        private readonly RequestCoalescer _coalescer;
         private readonly TimeSpan _ttl;
         private static readonly TimeSpan DiffTtl = TimeSpan.FromHours(6);
 
-        public CachingBitbucketClient(IBitbucketClient inner, IMemoryCache cache, IOptions<BitbucketOptions> options)
+        public CachingBitbucketClient(
+            IBitbucketClient inner,
+            IMemoryCache cache,
+            RequestCoalescer coalescer,
+            IOptions<BitbucketOptions> options)
         {
             _inner = inner;
             _cache = cache;
+            _coalescer = coalescer;
             _ttl = TimeSpan.FromMinutes(options.Value.CacheMinutes > 0 ? options.Value.CacheMinutes : 10);
         }
 
+        // Note: the inner calls receive CancellationToken.None because the fetch is shared between callers;
+        // each caller's token only controls how long that caller waits (see RequestCoalescer).
+
         public Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
-            => GetOrCreateAsync("bb:users", _ttl, () => _inner.GetUsersAsync(cancellationToken));
+            => GetOrCreateAsync("bb:users", _ttl, () => _inner.GetUsersAsync(CancellationToken.None), cancellationToken);
 
         public Task<IReadOnlyList<BitbucketRepositoryDto>> GetRepositoriesAsync(CancellationToken cancellationToken = default)
-            => GetOrCreateAsync("bb:repos", _ttl, () => _inner.GetRepositoriesAsync(cancellationToken));
+            => GetOrCreateAsync("bb:repos", _ttl, () => _inner.GetRepositoriesAsync(CancellationToken.None), cancellationToken);
 
         public Task<IReadOnlyList<BitbucketCommitDto>> GetCommitsAsync(
             string repoSlug,
@@ -33,7 +42,8 @@ namespace Bitbucket.Metrics.Repository.Implementations
             => GetOrCreateAsync(
                 $"bb:commits:{repoSlug}:{SinceKey(since)}",
                 _ttl,
-                () => _inner.GetCommitsAsync(repoSlug, since, cancellationToken));
+                () => _inner.GetCommitsAsync(repoSlug, since, CancellationToken.None),
+                cancellationToken);
 
         public Task<IReadOnlyList<BitbucketPullRequestDto>> GetPullRequestsAsync(
             string repoSlug,
@@ -43,7 +53,8 @@ namespace Bitbucket.Metrics.Repository.Implementations
             => GetOrCreateAsync(
                 $"bb:prs:{repoSlug}:{StatesKey(states)}:{SinceKey(since)}",
                 _ttl,
-                () => _inner.GetPullRequestsAsync(repoSlug, states, since, cancellationToken));
+                () => _inner.GetPullRequestsAsync(repoSlug, states, since, CancellationToken.None),
+                cancellationToken);
 
         public Task<IReadOnlyList<ReviewerMetricDto>> GetReviewerStatsAsync(
             string repoSlug,
@@ -53,30 +64,34 @@ namespace Bitbucket.Metrics.Repository.Implementations
             => GetOrCreateAsync(
                 $"bb:reviewers:{repoSlug}:{StatesKey(states)}:{SinceKey(since)}",
                 _ttl,
-                () => _inner.GetReviewerStatsAsync(repoSlug, states, since, cancellationToken));
+                () => _inner.GetReviewerStatsAsync(repoSlug, states, since, CancellationToken.None),
+                cancellationToken);
 
-        public async Task<(int LinesAdded, int LinesRemoved)> GetCommitDiffStatAsync(
+        public Task<(int LinesAdded, int LinesRemoved)> GetCommitDiffStatAsync(
             string repoSlug,
             string commitHash,
             CancellationToken cancellationToken = default)
-        {
-            string key = $"bb:diff:{repoSlug}:{commitHash}";
-            if (_cache.TryGetValue(key, out (int Added, int Removed) cached))
-                return cached;
+            => GetOrCreateAsync(
+                $"bb:diff:{repoSlug}:{commitHash}",
+                DiffTtl,
+                () => _inner.GetCommitDiffStatAsync(repoSlug, commitHash, CancellationToken.None),
+                cancellationToken);
 
-            (int LinesAdded, int LinesRemoved) result = await _inner.GetCommitDiffStatAsync(repoSlug, commitHash, cancellationToken);
-            _cache.Set(key, (result.LinesAdded, result.LinesRemoved), DiffTtl);
-            return result;
-        }
-
-        private async Task<T> GetOrCreateAsync<T>(string key, TimeSpan ttl, Func<Task<T>> factory)
+        private Task<T> GetOrCreateAsync<T>(string key, TimeSpan ttl, Func<Task<T>> factory, CancellationToken cancellationToken)
         {
             if (_cache.TryGetValue(key, out T? cached) && cached is not null)
-                return cached;
+                return Task.FromResult(cached);
 
-            T value = await factory();
-            _cache.Set(key, value, ttl);
-            return value;
+            return _coalescer.RunAsync(key, async () =>
+            {
+                // Another caller may have filled the cache between our miss and joining the in-flight call.
+                if (_cache.TryGetValue(key, out T? fresh) && fresh is not null)
+                    return fresh;
+
+                T value = await factory().ConfigureAwait(false);
+                _cache.Set(key, value, ttl);
+                return value;
+            }, cancellationToken);
         }
 
         private static string SinceKey(DateTimeOffset? since)

@@ -17,6 +17,7 @@ namespace Bitbucket.Metrics.Repository
             int retryCount = configuration.GetSection(BitbucketOptions.SectionName).GetValue<int?>(nameof(BitbucketOptions.RetryCount)) ?? 3;
 
             services.AddMemoryCache();
+            services.AddSingleton<RequestCoalescer>();
 
             services.AddHttpClient<BitbucketClient>()
                     .AddPolicyHandler(GetRetryPolicy(retryCount));
@@ -24,6 +25,7 @@ namespace Bitbucket.Metrics.Repository
             services.AddTransient<IBitbucketClient>(sp => new CachingBitbucketClient(
                 sp.GetRequiredService<BitbucketClient>(),
                 sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                sp.GetRequiredService<RequestCoalescer>(),
                 sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<BitbucketOptions>>()));
 
             return services;

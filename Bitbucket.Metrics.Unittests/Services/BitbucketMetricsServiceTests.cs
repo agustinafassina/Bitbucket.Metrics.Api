@@ -12,10 +12,10 @@ public class BitbucketMetricsServiceTests
 {
     private static readonly DateTimeOffset Base = new(2024, 6, 3, 10, 0, 0, TimeSpan.Zero); // Monday 10:00 UTC
 
-    private static BitbucketMetricsService CreateSut(IBitbucketClient client, int maxDiffCommits = 300)
+    private static BitbucketMetricsService CreateSut(IBitbucketClient client, int maxDiffCommits = 300, int maxParallelRequests = 6)
         => new(
             client,
-            Options.Create(new BitbucketOptions { MaxDiffCommits = maxDiffCommits }),
+            Options.Create(new BitbucketOptions { MaxDiffCommits = maxDiffCommits, MaxParallelRequests = maxParallelRequests }),
             NullLogger<BitbucketMetricsService>.Instance);
 
     private static BitbucketCommitDto Commit(
@@ -277,6 +277,63 @@ public class BitbucketMetricsServiceTests
         ChurnMetricDto? ana = Assert.Single(result);
         Assert.Equal(2, ana.Commits); // only 2 most recent processed
         client.Verify(c => c.GetCommitDiffStatAsync("repo1", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task GetChurn_runs_diffstats_in_parallel_within_limit()
+    {
+        List<BitbucketCommitDto> commits = Enumerable.Range(0, 20)
+            .Select(i => Commit(i % 2 == 0 ? "Ana" : "Beto", Base.AddHours(i), hash: $"h{i}"))
+            .ToList();
+
+        int inFlight = 0;
+        int maxInFlight = 0;
+        Mock<IBitbucketClient> client = new();
+        client.Setup(c => c.GetCommitsAsync("repo1", It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(commits);
+        client.Setup(c => c.GetCommitDiffStatAsync("repo1", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .Returns(async () =>
+              {
+                  int now = Interlocked.Increment(ref inFlight);
+                  InterlockedMax(ref maxInFlight, now);
+                  await Task.Delay(20);
+                  Interlocked.Decrement(ref inFlight);
+                  return (3, 1);
+              });
+
+        IReadOnlyList<ChurnMetricDto> result = await CreateSut(client.Object, maxParallelRequests: 3).GetChurnAsync("repo1");
+
+        Assert.InRange(maxInFlight, 2, 3);
+        Assert.Equal(10, Assert.Single(result, c => c.Author == "Ana").Commits);
+        Assert.Equal(30, Assert.Single(result, c => c.Author == "Beto").LinesAdded);
+    }
+
+    [Fact]
+    public async Task GetRepositoryActivity_keeps_results_per_repo_when_fetched_in_parallel()
+    {
+        Mock<IBitbucketClient> client = new();
+        client.Setup(c => c.GetRepositoriesAsync(It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new List<BitbucketRepositoryDto> { new() { Slug = "slow" }, new() { Slug = "fast" } });
+        client.Setup(c => c.GetCommitsAsync("slow", It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+              .Returns(async () =>
+              {
+                  await Task.Delay(50);
+                  return (IReadOnlyList<BitbucketCommitDto>)new List<BitbucketCommitDto> { Commit("Ana", Base, "slow") };
+              });
+        client.Setup(c => c.GetCommitsAsync("fast", It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new List<BitbucketCommitDto> { Commit("Beto", Base, "fast"), Commit("Beto", Base, "fast") });
+
+        IReadOnlyList<RepositoryActivityDto> result = await CreateSut(client.Object).GetRepositoryActivityAsync();
+
+        Assert.Equal("Ana", Assert.Single(result, r => r.RepositorySlug == "slow").TopContributor);
+        Assert.Equal(2, Assert.Single(result, r => r.RepositorySlug == "fast").CommitCount);
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target)) &&
+               Interlocked.CompareExchange(ref target, value, current) != current) { }
     }
 
     [Fact]

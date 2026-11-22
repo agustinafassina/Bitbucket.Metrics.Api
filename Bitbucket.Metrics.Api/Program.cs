@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Bitbucket.Metrics.Api.Middleware;
 using Bitbucket.Metrics.Repository;
@@ -39,11 +40,15 @@ builder.Services.AddCors(options =>
 });
 
 // Authentication
+const string AuthScheme = "Auth0App1";
+
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = AuthScheme;
+    options.DefaultAuthenticateScheme = AuthScheme;
+    options.DefaultChallengeScheme = AuthScheme;
 })
-.AddJwtBearer("Auth0App1", options =>
+.AddJwtBearer(AuthScheme, options =>
 {
     options.Audience = configuration["Auth0App1:Audience"] ?? Environment.GetEnvironmentVariable("Auth0App1.Audience");
     options.Authority = configuration["Auth0App1:Issuer"] ?? Environment.GetEnvironmentVariable("Auth0App1.Issuer");
@@ -76,6 +81,14 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// Authorization: every endpoint requires a valid token unless marked [AllowAnonymous]
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder(AuthScheme)
+        .RequireAuthenticatedUser()
+        .Build();
+});
+
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 
@@ -95,6 +108,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

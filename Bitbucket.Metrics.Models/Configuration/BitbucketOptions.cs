@@ -12,5 +12,6 @@ namespace Bitbucket.Metrics.Models.Configuration
         public int MaxDiffCommits { get; set; } = 300;
         public int CacheMinutes { get; set; } = 10;
         public int RetryCount { get; set; } = 3;
+        public int MaxParallelRequests { get; set; } = 6;
     }
 }
