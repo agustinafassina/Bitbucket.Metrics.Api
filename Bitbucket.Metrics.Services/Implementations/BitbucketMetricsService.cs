@@ -16,6 +16,7 @@ namespace Bitbucket.Metrics.Services.Implementations
         private readonly IBitbucketClient _client;
         private readonly ILogger<BitbucketMetricsService> _logger;
         private readonly int _maxDiffCommits;
+        private readonly int _maxParallelRequests;
 
         public BitbucketMetricsService(
             IBitbucketClient client,
@@ -25,6 +26,7 @@ namespace Bitbucket.Metrics.Services.Implementations
             _client = client;
             _logger = logger;
             _maxDiffCommits = options.Value.MaxDiffCommits > 0 ? options.Value.MaxDiffCommits : 300;
+            _maxParallelRequests = options.Value.MaxParallelRequests > 0 ? options.Value.MaxParallelRequests : 6;
         }
 
         public Task<IReadOnlyList<BitbucketUserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
@@ -110,31 +112,11 @@ namespace Bitbucket.Metrics.Services.Implementations
             CancellationToken cancellationToken = default)
         {
             IReadOnlyList<BitbucketRepositoryDto> repos = await _client.GetRepositoriesAsync(cancellationToken);
-            List<RepositoryActivityDto>? activity = new(repos.Count);
+            IReadOnlyList<BitbucketCommitDto>[] commitsPerRepo = await RunConcurrentAsync(
+                repos, (repo, ct) => _client.GetCommitsAsync(repo.Slug, since, ct), cancellationToken);
 
-            foreach (BitbucketRepositoryDto? repo in repos)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repo.Slug, since, cancellationToken);
-
-                string? topContributor = commits
-                    .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
-                    .OrderByDescending(g => g.Count())
-                    .Select(g => g.Key)
-                    .FirstOrDefault();
-
-                activity.Add(new RepositoryActivityDto
-                {
-                    RepositorySlug = repo.Slug,
-                    CommitCount = commits.Count,
-                    ContributorCount = commits.Select(c => c.AuthorName).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
-                    FirstCommit = commits.Count > 0 ? commits.Min(c => c.Date) : null,
-                    LastCommit = commits.Count > 0 ? commits.Max(c => c.Date) : null,
-                    TopContributor = topContributor
-                });
-            }
-
-            return activity
+            return repos
+                .Select((repo, i) => BuildRepositoryActivity(repo.Slug, commitsPerRepo[i]))
                 .OrderByDescending(a => a.CommitCount)
                 .ThenBy(a => a.RepositorySlug)
                 .ToList();
@@ -220,11 +202,9 @@ namespace Bitbucket.Metrics.Services.Implementations
             else
             {
                 IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
-                foreach (BitbucketRepositoryDto? repo in repos)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    perRepo.AddRange(await _client.GetReviewerStatsAsync(repo.Slug, AllPullRequestStates, since, cancellationToken));
-                }
+                IReadOnlyList<ReviewerMetricDto>[] statsPerRepo = await RunConcurrentAsync(
+                    repos, (repo, ct) => _client.GetReviewerStatsAsync(repo.Slug, AllPullRequestStates, since, ct), cancellationToken);
+                perRepo.AddRange(statsPerRepo.SelectMany(s => s));
             }
 
             return perRepo
@@ -254,12 +234,15 @@ namespace Bitbucket.Metrics.Services.Implementations
             if (scoped.Count < commits.Count)
                 _logger.LogWarning("Churn limited to {Limit} of {Total} commits (MaxDiffCommits).", scoped.Count, commits.Count);
 
+            (int LinesAdded, int LinesRemoved)[] diffs = await RunConcurrentAsync(
+                scoped, (commit, ct) => _client.GetCommitDiffStatAsync(commit.RepositorySlug, commit.Hash, ct), cancellationToken);
+
             var byAuthor = new Dictionary<string, ChurnMetricDto>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (BitbucketCommitDto? commit in scoped)
+            for (int i = 0; i < scoped.Count; i++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var (added, removed) = await _client.GetCommitDiffStatAsync(commit.RepositorySlug, commit.Hash, cancellationToken);
+                BitbucketCommitDto commit = scoped[i];
+                (int added, int removed) = diffs[i];
 
                 if (!byAuthor.TryGetValue(commit.AuthorName, out var metric))
                 {
@@ -346,29 +329,13 @@ namespace Bitbucket.Metrics.Services.Implementations
             CancellationToken cancellationToken = default)
         {
             IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
-            List<BitbucketCommitDto>? allCommits = new();
-            List<RepositoryActivityDto>? repoActivity = new(repos.Count);
+            IReadOnlyList<BitbucketCommitDto>[] commitsPerRepo = await RunConcurrentAsync(
+                repos, (repo, ct) => _client.GetCommitsAsync(repo.Slug, since, ct), cancellationToken);
 
-            foreach (BitbucketRepositoryDto? repo in repos)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repo.Slug, since, cancellationToken);
-                allCommits.AddRange(commits);
-
-                repoActivity.Add(new RepositoryActivityDto
-                {
-                    RepositorySlug = repo.Slug,
-                    CommitCount = commits.Count,
-                    ContributorCount = commits.Select(c => c.AuthorName).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
-                    FirstCommit = commits.Count > 0 ? commits.Min(c => c.Date) : null,
-                    LastCommit = commits.Count > 0 ? commits.Max(c => c.Date) : null,
-                    TopContributor = commits
-                        .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
-                        .OrderByDescending(g => g.Count())
-                        .Select(g => g.Key)
-                        .FirstOrDefault()
-                });
-            }
+            List<BitbucketCommitDto> allCommits = commitsPerRepo.SelectMany(c => c).ToList();
+            List<RepositoryActivityDto> repoActivity = repos
+                .Select((repo, i) => BuildRepositoryActivity(repo.Slug, commitsPerRepo[i]))
+                .ToList();
 
             List<CommitterMetricDto>? topCommitters = allCommits
                 .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
@@ -434,13 +401,9 @@ namespace Bitbucket.Metrics.Services.Implementations
             else
             {
                 IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
-                all = new();
-                foreach (BitbucketRepositoryDto? repo in repos)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    IReadOnlyList<BitbucketCommitDto> commits = await _client.GetCommitsAsync(repo.Slug, since, cancellationToken);
-                    all.AddRange(commits);
-                }
+                IReadOnlyList<BitbucketCommitDto>[] commitsPerRepo = await RunConcurrentAsync(
+                    repos, (repo, ct) => _client.GetCommitsAsync(repo.Slug, since, ct), cancellationToken);
+                all = commitsPerRepo.SelectMany(c => c).ToList();
             }
 
             return string.IsNullOrWhiteSpace(authorId)
@@ -465,16 +428,53 @@ namespace Bitbucket.Metrics.Services.Implementations
             }
 
             IReadOnlyList<BitbucketRepositoryDto>? repos = await _client.GetRepositoriesAsync(cancellationToken);
-            List<BitbucketPullRequestDto>? all = new();
-            foreach (BitbucketRepositoryDto? repo in repos)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                IReadOnlyList<BitbucketPullRequestDto> prs = await _client.GetPullRequestsAsync(repo.Slug, AllPullRequestStates, since, cancellationToken);
-                all.AddRange(prs);
-            }
+            IReadOnlyList<BitbucketPullRequestDto>[] prsPerRepo = await RunConcurrentAsync(
+                repos, (repo, ct) => _client.GetPullRequestsAsync(repo.Slug, AllPullRequestStates, since, ct), cancellationToken);
 
-            return all;
+            return prsPerRepo.SelectMany(p => p).ToList();
         }
+
+        /// <summary>
+        /// Runs <paramref name="action"/> for every item with at most MaxParallelRequests calls in flight,
+        /// returning results in the same order as <paramref name="items"/>. The first failure cancels the rest.
+        /// </summary>
+        private async Task<TOut[]> RunConcurrentAsync<TIn, TOut>(
+            IReadOnlyList<TIn> items,
+            Func<TIn, CancellationToken, Task<TOut>> action,
+            CancellationToken cancellationToken)
+        {
+            TOut[] results = new TOut[items.Count];
+            if (items.Count == 0)
+                return results;
+
+            ParallelOptions options = new()
+            {
+                MaxDegreeOfParallelism = _maxParallelRequests,
+                CancellationToken = cancellationToken
+            };
+
+            await Parallel.ForEachAsync(Enumerable.Range(0, items.Count), options, async (i, ct) =>
+            {
+                results[i] = await action(items[i], ct);
+            });
+
+            return results;
+        }
+
+        private static RepositoryActivityDto BuildRepositoryActivity(string repoSlug, IReadOnlyList<BitbucketCommitDto> commits)
+            => new()
+            {
+                RepositorySlug = repoSlug,
+                CommitCount = commits.Count,
+                ContributorCount = commits.Select(c => c.AuthorName).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                FirstCommit = commits.Count > 0 ? commits.Min(c => c.Date) : null,
+                LastCommit = commits.Count > 0 ? commits.Max(c => c.Date) : null,
+                TopContributor = commits
+                    .GroupBy(c => c.AuthorName, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.Key)
+                    .FirstOrDefault()
+            };
 
         private static double Median(List<double> values)
         {
